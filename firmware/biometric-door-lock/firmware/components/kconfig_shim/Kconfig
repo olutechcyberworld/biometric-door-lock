@@ -1,0 +1,8 @@
+# Workaround kept from bring-up: some esp_video releases reference this option in a manifest rule without defining
+# it in the release that gets resolved, which makes the component manager stop with "Missing required kconfig
+# option". Defining it here (disabled) is harmless: the rule it guards only concerns the ESP32-P4 target.
+menu "Kconfig shim (resolver workaround)"
+    config ESP_VIDEO_USE_CUSTOMIZED_ESP_H264_VERSION
+        bool "Shim for esp_video manifest rule (keep disabled)"
+        default n
+endmenu

@@ -1,0 +1,5 @@
+## Board support package: ESP32-S3-EYE pin map (the camera header of this dev board is wired the same way).
+## The dependency versions that actually build are pinned in ../dependencies.lock - commit that file.
+dependencies:
+  espressif/esp32_s3_eye:
+    version: "*"

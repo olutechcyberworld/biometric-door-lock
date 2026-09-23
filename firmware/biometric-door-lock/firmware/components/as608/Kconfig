@@ -1,0 +1,14 @@
+menu "AS608 fingerprint sensor"
+    config AS608_UART_NUM
+        int "UART port used for the sensor (not 0: that is the console)"
+        default 1
+    config AS608_TX_GPIO
+        int "ESP32 TX GPIO (wired to the module's RX)"
+        default 1
+    config AS608_RX_GPIO
+        int "ESP32 RX GPIO (wired to the module's TX)"
+        default 2
+    config AS608_BAUD
+        int "Sensor baud rate (module default is 57600)"
+        default 57600
+endmenu

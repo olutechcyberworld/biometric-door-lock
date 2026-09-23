@@ -1,0 +1,14 @@
+# ESP-IDF build products
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+# tools
+__pycache__/
+*.pyc
+tools/dashboard_out/
+dashboard_out/
+viewer_out/
+# editor
+.vscode/
+.idea/

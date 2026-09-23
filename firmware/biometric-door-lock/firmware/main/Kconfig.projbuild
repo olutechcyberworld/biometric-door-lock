@@ -1,0 +1,8 @@
+menu "Door lock"
+    config DOORLOCK_FINGERPRINT
+        bool "Enable the AS608 fingerprint interface (Phase 2)"
+        default y
+        help
+            Starts the fingerprint task and enables the f / n / p / X console commands.
+            Turn off to build the camera/face part only (for example while the sensor is not wired).
+endmenu
