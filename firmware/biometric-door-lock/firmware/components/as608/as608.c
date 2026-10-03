@@ -118,38 +118,51 @@ static int recv_ack(as608_t *d, uint8_t *payload, size_t max, uint32_t timeout_m
     uint32_t t0 = d->io.now_ms(d->io.ctx);
     int state = 0;
     uint8_t b;
+    d->dbg_rx = 0;
+    d->dbg_stage = 0;
     while (state < 2) { /* resynchronise on EF 01 */
         int r = read_exact(d, &b, 1, t0, timeout_ms);
-        if (r < 0) {
-            return AS608_ERR_COMM;
+        if (r <= 0) {
+            return AS608_ERR_COMM; /* dbg_stage stays 0 (silence) or 1 (only noise arrived) */
         }
-        if (r == 0) {
-            return AS608_ERR_COMM;
-        }
+        d->dbg_rx++;
+        d->dbg_stage = 1;
         if (state == 0) {
             state = (b == HDR_HI) ? 1 : 0;
         } else {
             state = (b == HDR_LO) ? 2 : ((b == HDR_HI) ? 1 : 0);
         }
     }
+    d->dbg_rx = (uint16_t)(d->dbg_rx);
     uint8_t h[7]; /* address(4) pid(1) length(2) */
-    if (read_exact(d, h, sizeof h, t0, timeout_ms) != (int)sizeof h) {
+    int got = read_exact(d, h, sizeof h, t0, timeout_ms);
+    if (got > 0) {
+        d->dbg_rx = (uint16_t)(d->dbg_rx + got);
+    }
+    if (got != (int)sizeof h) {
+        d->dbg_stage = 3;
         return AS608_ERR_COMM;
     }
     uint32_t addr = ((uint32_t)h[0] << 24) | ((uint32_t)h[1] << 16) | ((uint32_t)h[2] << 8) | h[3];
     uint16_t len = (uint16_t)((h[5] << 8) | h[6]);
     if (addr != d->address || h[4] != PID_ACK || len < 3 || (size_t)(len - 2) > max) {
+        d->dbg_stage = 2;
         return AS608_ERR_COMM;
     }
     uint8_t tail[2];
-    if (read_exact(d, payload, (size_t)len - 2, t0, timeout_ms) != (int)(len - 2) ||
-        read_exact(d, tail, 2, t0, timeout_ms) != 2) {
+    int gp = read_exact(d, payload, (size_t)len - 2, t0, timeout_ms);
+    int gt = (gp == (int)(len - 2)) ? read_exact(d, tail, 2, t0, timeout_ms) : 0;
+    d->dbg_rx = (uint16_t)(d->dbg_rx + (gp > 0 ? gp : 0) + (gt > 0 ? gt : 0));
+    if (gp != (int)(len - 2) || gt != 2) {
+        d->dbg_stage = 3;
         return AS608_ERR_COMM;
     }
     uint32_t cs = (uint32_t)h[4] + h[5] + h[6] + sum16(payload, (size_t)len - 2);
     if ((uint16_t)cs != (uint16_t)((tail[0] << 8) | tail[1])) {
+        d->dbg_stage = 4;
         return AS608_ERR_CHECKSUM;
     }
+    d->dbg_stage = 5;
     return (int)(len - 2);
 }
 

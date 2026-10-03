@@ -46,6 +46,11 @@ typedef struct {
     uint32_t address;  /* module address, default 0xFFFFFFFF */
     uint32_t password; /* default 0x00000000                 */
     uint16_t capacity; /* filled by as608_read_params        */
+    /* Diagnostics of the LAST exchange, so a failed probe says WHY it failed:
+     * dbg_stage: 0 = silence (0 bytes), 1 = bytes arrived but no EF01 header, 2 = header seen but address/PID/length
+     *            rejected, 3 = packet cut short, 4 = checksum mismatch, 5 = ok                                   */
+    uint16_t dbg_rx;
+    uint8_t dbg_stage;
 } as608_t;
 
 typedef struct {

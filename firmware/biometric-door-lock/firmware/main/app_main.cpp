@@ -15,6 +15,8 @@
 #include "who_spiflash_fatfs.hpp"
 #include "who_yield2idle.hpp"
 #include "fingerprint_task.hpp"
+#include "auth_task.hpp"
+#include "face_auth_bridge.hpp"
 
 using who::recognition::WhoRecognitionCore;
 
@@ -30,7 +32,12 @@ public:
     BenchApp(frame_cap::WhoFrameCap *frame_cap) : WhoRecognitionAppBase(frame_cap)
     {
         auto recog = m_recognition->get_recognition_task();
-        recog->set_recognition_result_cb([](const std::string &r) { ESP_LOGI(TAG, "%s", r.c_str()); });
+        recog->set_detect_result_cb(
+            [](const who::detect::WhoDetect::result_t &r) { face_auth_on_detect(r.det_res.size()); });
+        recog->set_recognition_result_cb([](const std::string &r) {
+            ESP_LOGI(TAG, "%s", r.c_str());
+            face_auth_on_result(r); // no-op unless main/auth_task.cpp is currently waiting on this result
+        });
         char db_path[64];
         snprintf(db_path, sizeof(db_path), "%s/face.db", CONFIG_SPIFLASH_MOUNT_POINT);
         m_recognition->set_recognizer(new HumanFaceRecognizer(db_path));
@@ -126,4 +133,5 @@ extern "C" void app_main(void)
         return;
     }
     xTaskCreate(console_task, "console", 4096, app->recog_task(), 3, nullptr);
+    auth_task_start(app->recog_task()); // Phase 3: continuous fingerprint -> face -> relay loop; no-op if disabled
 }

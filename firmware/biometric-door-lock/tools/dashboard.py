@@ -243,7 +243,7 @@ class Dashboard:
             if self.log and self.log[-1]["text"] == text and self.log[-1]["lvl"] == lvl:
                 self.log[-1]["n"] += 1
             else:
-                self.log.append(dict(t=time.strftime("%H:%M:%S"), lvl=lvl, text=text, n=1))
+                self.log.append(dict(t=time.strftime("%H:%M:%S.") + f"{int(time.time()*1000)%1000:03d}", lvl=lvl, text=text, n=1))
 
     def reader(self):
         buf = b""
@@ -813,12 +813,16 @@ def make_handler(dash):
             elif c == "delete":
                 dash.send("d"); msg = "delete-last sent"
             elif c == "fp_identify":
-                dash.send("f"); msg = "identify started - place a finger"
+                dash._log("info", "[button] fp_identify clicked -> sending 'f'"); dash.send("f")
+                msg = "identify started - place a finger"
             elif c == "fp_enroll":
-                dash.send("n"); msg = "enrollment started - follow the prompts"
+                dash._log("info", "[button] fp_enroll clicked -> sending 'n'"); dash.send("n")
+                msg = "enrollment started - follow the prompts"
             elif c == "fp_probe":
-                dash.send("p"); msg = "probing the fingerprint sensor"
+                dash._log("info", "[button] fp_probe clicked -> sending 'p'"); dash.send("p")
+                msg = "probing the fingerprint sensor"
             elif c == "fp_empty":
+                dash._log("info", "[button] fp_empty clicked -> sending 'X' x2")
                 dash.send("X"); time.sleep(0.5); dash.send("X"); msg = "erase sent"
             elif c == "mode" and v in ("q", "h", "v"):
                 dash.mode = v; msg = f"mode {v}"

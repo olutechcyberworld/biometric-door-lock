@@ -19,6 +19,12 @@ PWDN and RESET are not connected (-1) - the sensor cannot be power-cycled by sof
 Candidates for the relay, LEDs, buzzer and button (Phase 3): 14, 21, 38-42, 47, 48 - **verify against your board's pin
 header and schematic first**; some boards route these to an SD slot or an RGB LED.
 
+Phase 3/4 assignment (default, changeable in menuconfig: "Door lock"): relay = 14, green LED = 21, red LED = 38,
+buzzer = 39, white illuminator LED = 40 (BC549 NPN transistor driver, confirmed - see the project's wiring
+table), wake/start button = 41 (ESP32-S3 internal pull-up, button to GND, no external resistor - confirmed).
+Relay confirmed active-high (matches firmware default). Buzzer confirmed active (self-oscillating; firmware
+just pulses it on/off, no tone generation needed). 42, 47, 48 remain free.
+
 ## AS608 fingerprint module
 ```
 module TX  ->  ESP32 RX (GPIO 2)          module RX  ->  ESP32 TX (GPIO 1)

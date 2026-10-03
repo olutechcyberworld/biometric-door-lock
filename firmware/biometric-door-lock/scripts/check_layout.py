@@ -19,7 +19,10 @@ for dp, _, files in os.walk(os.path.join(fw, "third_party")):
                 need(os.path.normpath(os.path.join(dp, m.group(1), "CMakeLists.txt")), f"path: in {os.path.relpath(dp, root)}")
 for f in ["main/CMakeLists.txt", "main/idf_component.yml", "main/app_main.cpp", "main/frame_cap_pipeline.cpp",
           "main/fingerprint_task.cpp", "sdkconfig.defaults", "partitions.csv", "dependencies.lock",
-          "components/as608/CMakeLists.txt", "components/kconfig_shim/Kconfig"]:
+          "components/as608/CMakeLists.txt", "components/kconfig_shim/Kconfig",
+          "components/auth_fsm/CMakeLists.txt", "components/relay_control/CMakeLists.txt",
+          "components/retry_lockout/CMakeLists.txt",
+          "main/auth_task.cpp", "main/face_auth_bridge.cpp"]:
     need(os.path.join(fw, f), "firmware file")
 d = open(os.path.join(fw, "sdkconfig.defaults")).read()
 m = re.search(r'CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="([^"]+)"', d)

@@ -5,4 +5,93 @@ menu "Door lock"
         help
             Starts the fingerprint task and enables the f / n / p / X console commands.
             Turn off to build the camera/face part only (for example while the sensor is not wired).
+
+    config DOORLOCK_AUTH_AUTO
+        bool "Run the automatic fingerprint + face authentication loop (Phase 3)"
+        default y
+        depends on DOORLOCK_FINGERPRINT
+        help
+            Starts a task that continuously waits for a fingerprint match, then a face match, and drives the
+            relay on success (see components/auth_fsm for the decision logic). Turn off while doing manual
+            fingerprint enrollment/testing from the console or dashboard: the auth loop and manual f/n/p/X
+            commands share the same sensor, and only one runs at a time - a manual command sent while the auth
+            loop is mid-check is simply refused with FP,busy, not queued.
+
+    config DOORLOCK_RELAY_GPIO
+        int "Relay GPIO (drives the solenoid lock via the relay module)"
+        default 14
+        depends on DOORLOCK_AUTH_AUTO
+        help
+            Default is one of the "Phase 3 candidates" listed in docs/WIRING.md, NOT yet checked against your
+            board's schematic - verify before wiring, the same way the AS608 pins were.
+
+    config DOORLOCK_LED_GREEN_GPIO
+        int "Green (access granted) status LED GPIO"
+        default 21
+        depends on DOORLOCK_AUTH_AUTO
+
+    config DOORLOCK_LED_RED_GPIO
+        int "Red (access denied) status LED GPIO"
+        default 38
+        depends on DOORLOCK_AUTH_AUTO
+
+    config DOORLOCK_BUZZER_GPIO
+        int "Buzzer GPIO"
+        default 39
+        depends on DOORLOCK_AUTH_AUTO
+
+    config DOORLOCK_LED_WHITE_GPIO
+        int "White illuminator LED GPIO (near the camera; lit during the face-check stage)"
+        default 40
+        depends on DOORLOCK_AUTH_AUTO
+        help
+            Drive this through a transistor/MOSFET, not straight off the GPIO - see docs/WIRING.md. It exists
+            for two reasons at once: it tells the person "look at the camera now", and lighting the face
+            directly addresses the dim-light weak point measured in Phase 1 (51% no-face-detected attempts).
+
+    config DOORLOCK_UNLOCK_MS
+        int "How long the relay stays energized on a granted unlock (milliseconds)"
+        default 4000
+        depends on DOORLOCK_AUTH_AUTO
+
+    config DOORLOCK_MAX_ATTEMPTS
+        int "Consecutive failed attempts (fingerprint or face) before a cooldown lockout"
+        default 3
+        depends on DOORLOCK_AUTH_AUTO
+
+    config DOORLOCK_COOLDOWN_1_MS
+        int "First lockout cooldown (milliseconds)"
+        default 30000
+        depends on DOORLOCK_AUTH_AUTO
+
+    config DOORLOCK_COOLDOWN_2_MS
+        int "Second lockout cooldown, if it happens again without a successful unlock in between (milliseconds)"
+        default 60000
+        depends on DOORLOCK_AUTH_AUTO
+
+    config DOORLOCK_COOLDOWN_3_MS
+        int "Third and all further lockout cooldowns, capped here (milliseconds)"
+        default 300000
+        depends on DOORLOCK_AUTH_AUTO
+
+    config DOORLOCK_BUTTON_GPIO
+        int "Wake/start button GPIO"
+        default 41
+        depends on DOORLOCK_AUTH_AUTO
+        help
+            Configured as an input with the ESP32-S3's internal pull-up enabled - wire the button between this
+            pin and GND only, no external resistor needed. Pressing it reads as logic low.
+
+    config DOORLOCK_FINGER_WAIT_MS
+        int "How long a session waits for a finger after the button is pressed (milliseconds)"
+        default 10000
+        depends on DOORLOCK_AUTH_AUTO
+        help
+            If nobody touches the sensor within this window, the session ends quietly (LED off, no buzzer,
+            not counted as a failed attempt) rather than denying - see main/auth_task.cpp.
+
+    config DOORLOCK_GREEN_BLINK_MS
+        int "Green LED blink half-period while waiting for a finger (milliseconds)"
+        default 300
+        depends on DOORLOCK_AUTH_AUTO
 endmenu

@@ -12,3 +12,4 @@ viewer_out/
 # editor
 .vscode/
 .idea/
+*.patch
