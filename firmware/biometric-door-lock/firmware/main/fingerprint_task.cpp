@@ -21,6 +21,15 @@ static int64_t s_empty_armed_until_us;
 static volatile bool s_busy; // true while an operation owns the sensor; new commands are refused, not queued
 static QueueHandle_t s_auth_req_queue;    // holds one uint32_t timeout_ms; posted by fingerprint_post_auth_identify()
 static QueueHandle_t s_auth_result_queue; // holds one fingerprint_auth_result_t; consumed by fingerprint_get_auth_result()
+struct enroll_req_t {
+    uint32_t timeout_ms;
+    fingerprint_enroll_progress_cb cb;
+    void *user;
+};
+static QueueHandle_t s_enroll_req_queue;    // one enroll_req_t, posted by fingerprint_post_enroll()
+static QueueHandle_t s_enroll_result_queue; // one fingerprint_enroll_result_t, consumed by fingerprint_get_enroll_result()
+static QueueHandle_t s_del_req_queue;       // one uint16_t slot, posted by fingerprint_delete_slot()
+static QueueHandle_t s_del_result_queue;    // one int (AS608 return code)
 
 static void print_state()
 {
@@ -131,6 +140,94 @@ static void do_enroll()
     }
 }
 
+static void app_enroll_step(as608_enroll_step_t st, void *p)
+{
+    static const char *names[] = {"place1", "remove", "place2", "storing"};
+    printf("FP,enroll,step=%s\n", names[st]);
+    const enroll_req_t *rq = static_cast<const enroll_req_t *>(p);
+    if (rq && rq->cb) {
+        rq->cb((int)st, rq->user);
+    }
+}
+
+// Same flow as do_enroll(), but requested by the owner app: reports a typed result for session_ws.cpp.
+static void do_app_enroll(const enroll_req_t &req)
+{
+    fingerprint_enroll_result_t res = {};
+    res.outcome = FP_ENROLL_ERROR;
+    uint16_t id = 0, used = 0;
+    int r = as608_next_free_id(&s_dev, &id, &used);
+    if (r == AS608_ERR_NO_SPACE) {
+        res.outcome = FP_ENROLL_FULL;
+    } else if (r == AS608_OK) {
+        printf("FP,enroll,step=start,id=%u,by=app\n", (unsigned)id);
+        r = as608_enroll(&s_dev, id, req.timeout_ms, app_enroll_step, const_cast<enroll_req_t *>(&req));
+        if (r < 0 && r != AS608_ERR_TIMEOUT) {
+            uint16_t after = 0; // lost reply: trust the library count, as do_enroll() does
+            if (as608_template_count(&s_dev, &after) == AS608_OK && after > used) {
+                r = AS608_OK;
+            }
+        }
+        if (r == AS608_OK) {
+            res.outcome = FP_ENROLL_OK;
+            res.id = id;
+            printf("FP,enroll,result=ok,id=%u,by=app\n", (unsigned)id);
+            print_state();
+        } else {
+            res.outcome = (r == AS608_ERR_TIMEOUT)    ? FP_ENROLL_TIMEOUT
+                          : (r == AS608_ERR_NO_SPACE) ? FP_ENROLL_FULL
+                          : (r == AS608_NO_MATCH || r == AS608_MERGE_FAIL || r == AS608_IMAGE_MESSY ||
+                             r == AS608_FEW_FEATURES || r == AS608_IMAGE_FAIL)
+                              ? FP_ENROLL_NOMATCH
+                              : FP_ENROLL_ERROR;
+            printf("FP,enroll,result=fail,code=%d,reason=%s,by=app\n", r, as608_strerror(r));
+        }
+    }
+    if (s_enroll_result_queue) {
+        xQueueOverwrite(s_enroll_result_queue, &res);
+    }
+}
+
+static void do_app_delete()
+{
+    uint16_t id = 0;
+    int r = AS608_ERR_ARG;
+    if (s_del_req_queue && xQueueReceive(s_del_req_queue, &id, 0) == pdTRUE) {
+        r = as608_delete(&s_dev, id, 1);
+        printf("FP,delete,id=%u,result=%s\n", (unsigned)id, r == AS608_OK ? "ok" : as608_strerror(r));
+        if (r == AS608_OK) {
+            print_state();
+        }
+    }
+    if (s_del_result_queue) {
+        xQueueOverwrite(s_del_result_queue, &r);
+    }
+}
+
+static fingerprint_keep_fn s_keep_fn;
+
+static void do_prune()
+{
+    int deleted = 0, failed = 0;
+    for (uint8_t page = 0; (uint16_t)page * 256u < s_dev.capacity; page++) {
+        uint8_t bits[32];
+        if (as608_read_index_table(&s_dev, page, bits) != AS608_OK) {
+            failed++;
+            continue;
+        }
+        for (uint16_t k = 0; k < 256u; k++) {
+            uint16_t id = (uint16_t)(page * 256u + k);
+            if (id >= s_dev.capacity) break;
+            if (!(bits[k / 8] & (1u << (k % 8)))) continue;
+            if (s_keep_fn && s_keep_fn(id)) continue;
+            if (as608_delete(&s_dev, id, 1) == AS608_OK) deleted++;
+            else failed++;
+        }
+    }
+    printf("FP,prune,deleted=%d,failed=%d\n", deleted, failed);
+    print_state();
+}
+
 static void do_empty()
 {
     int64_t now = esp_timer_get_time();
@@ -168,6 +265,16 @@ static void fingerprint_task(void *)
             case 'f': do_identify(); break;
             case 'n': do_enroll(); break;
             case 'X': do_empty(); break;
+            case 'E': {
+                enroll_req_t rq = {15000, nullptr, nullptr};
+                if (s_enroll_req_queue) {
+                    xQueueReceive(s_enroll_req_queue, &rq, 0);
+                }
+                do_app_enroll(rq);
+                break;
+            }
+            case 'D': do_app_delete(); break;
+            case 'U': do_prune(); break;
             case 'A': {
                 uint32_t timeout_ms = 8000;
                 if (s_auth_req_queue) {
@@ -189,6 +296,10 @@ void fingerprint_start()
     s_queue = xQueueCreate(4, sizeof(char));
     s_auth_req_queue = xQueueCreate(1, sizeof(uint32_t));
     s_auth_result_queue = xQueueCreate(1, sizeof(fingerprint_auth_result_t));
+    s_enroll_req_queue = xQueueCreate(1, sizeof(enroll_req_t));
+    s_enroll_result_queue = xQueueCreate(1, sizeof(fingerprint_enroll_result_t));
+    s_del_req_queue = xQueueCreate(1, sizeof(uint16_t));
+    s_del_result_queue = xQueueCreate(1, sizeof(int));
     xTaskCreatePinnedToCore(fingerprint_task, "fingerprint", 4096, nullptr, 3, nullptr, 0);
 }
 
@@ -223,11 +334,57 @@ bool fingerprint_get_auth_result(fingerprint_auth_result_t *out, uint32_t wait_m
     return s_auth_result_queue && xQueueReceive(s_auth_result_queue, out, pdMS_TO_TICKS(wait_ms)) == pdTRUE;
 }
 
+bool fingerprint_post_enroll(uint32_t step_timeout_ms, fingerprint_enroll_progress_cb cb, void *user)
+{
+    if (!s_queue || !s_enroll_req_queue || s_busy) {
+        return false;
+    }
+    xQueueReset(s_enroll_result_queue); // a result from an abandoned earlier request must not be taken for this one
+    enroll_req_t rq = {step_timeout_ms, cb, user};
+    xQueueOverwrite(s_enroll_req_queue, &rq);
+    char c = 'E';
+    return xQueueSend(s_queue, &c, 0) == pdTRUE;
+}
+
+bool fingerprint_get_enroll_result(fingerprint_enroll_result_t *out, uint32_t wait_ms)
+{
+    return s_enroll_result_queue && xQueueReceive(s_enroll_result_queue, out, pdMS_TO_TICKS(wait_ms)) == pdTRUE;
+}
+
+bool fingerprint_prune(fingerprint_keep_fn keep)
+{
+    if (!s_queue || s_busy || !keep) {
+        return false;
+    }
+    s_keep_fn = keep;
+    char c = 'U';
+    return xQueueSend(s_queue, &c, 0) == pdTRUE;
+}
+
+bool fingerprint_delete_slot(uint16_t id, uint32_t wait_ms)
+{
+    if (!s_queue || !s_del_req_queue || s_busy) {
+        return false;
+    }
+    xQueueReset(s_del_result_queue);
+    xQueueOverwrite(s_del_req_queue, &id);
+    char c = 'D';
+    if (xQueueSend(s_queue, &c, 0) != pdTRUE) {
+        return false;
+    }
+    int r = AS608_ERR_COMM;
+    return xQueueReceive(s_del_result_queue, &r, pdMS_TO_TICKS(wait_ms)) == pdTRUE && r == AS608_OK;
+}
+
 #else // fingerprint disabled in menuconfig
 
 void fingerprint_start() {}
 bool fingerprint_post(char) { return false; }
 bool fingerprint_post_auth_identify(uint32_t) { return false; }
 bool fingerprint_get_auth_result(fingerprint_auth_result_t *, uint32_t) { return false; }
+bool fingerprint_post_enroll(uint32_t, fingerprint_enroll_progress_cb, void *) { return false; }
+bool fingerprint_get_enroll_result(fingerprint_enroll_result_t *, uint32_t) { return false; }
+bool fingerprint_delete_slot(uint16_t, uint32_t) { return false; }
+bool fingerprint_prune(fingerprint_keep_fn) { return false; }
 
 #endif

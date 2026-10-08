@@ -20,6 +20,35 @@ RL="$ROOT/firmware/components/retry_lockout"
 gcc -std=c11 -Wall -Wextra -c "$RL/retry_lockout.c" -I"$RL/include" -o "$T/retry_lockout.o"
 g++ -std=c++17 -Wall -Wextra "$RL/test/test_retry_lockout.cpp" "$T/retry_lockout.o" -I"$RL/include" -o "$T/rl_test"
 "$T/rl_test"
+echo "== pin_auth (owner-app PIN challenge-response core)"
+PA="$ROOT/firmware/components/pin_auth"
+gcc -std=c11 -Wall -Wextra -c "$PA/pin_auth.c" -I"$PA/include" -I"$RL/include" -o "$T/pin_auth.o"
+g++ -std=c++17 -Wall -Wextra "$PA/test/test_pin_auth.cpp" "$T/pin_auth.o" "$T/retry_lockout.o" -I"$PA/include" -I"$RL/include" -o "$T/pin_auth_test"
+"$T/pin_auth_test"
+echo "== user_store (user table + finger<->face binding)"
+US="$ROOT/firmware/components/user_store"
+gcc -std=c11 -Wall -Wextra -c "$US/user_store.c" -I"$US/include" -o "$T/user_store.o"
+g++ -std=c++17 -Wall -Wextra "$US/test/test_user_store.cpp" "$T/user_store.o" -I"$US/include" -o "$T/user_store_test"
+"$T/user_store_test"
+echo "== jpeg_lite (live preview encoder)"
+JL="$ROOT/firmware/components/jpeg_lite"
+gcc -std=c11 -Wall -Wextra -c "$JL/jpeg_lite.c" -I"$JL/include" -o "$T/jpeg_lite.o"
+g++ -std=c++17 -Wall -Wextra "$JL/test/test_jpeg_lite.cpp" "$T/jpeg_lite.o" -lm -I"$JL/include" -o "$T/jpeg_lite_test"
+"$T/jpeg_lite_test" "$T/a.jpg" "$T/b.jpg"
+if python3 -c "import PIL" 2>/dev/null; then
+python3 - "$T/a.jpg" "$T/b.jpg" <<'PYEOF'
+import sys
+from PIL import Image
+a = Image.open(sys.argv[1]); a.load()
+assert a.size == (240, 240), a.size
+r, g, b = a.getpixel((30, 10)); assert r > 180 and b < 80, (r, g, b)      # left half: red-ish
+r, g, b = a.getpixel((200, 10)); assert b > 180 and r < 80, (r, g, b)     # right half: blue-ish
+c = Image.open(sys.argv[2]); c.load(); assert c.size == (13, 9)
+print("jpeg_lite: decoded by Pillow, colours ok")
+PYEOF
+else
+echo "(Pillow not installed: skipping the decode check)"
+fi
 echo "== frame dump (firmware) -> dashboard parser"
 FD="$ROOT/tests/host/frame_dump"; W="$ROOT/firmware/third_party/esp-who/components"
 g++ -std=c++17 -Wall -Wextra "$FD/dump_frame_test.cpp" -I"$FD/stub" -I"$W/who_detect" -I"$W/who_frame_cap" -o "$T/dump_frame_test"

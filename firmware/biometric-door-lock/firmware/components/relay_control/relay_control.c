@@ -52,6 +52,54 @@ bool relay_control_button_pressed(void)
     return gpio_get_level((gpio_num_t)CONFIG_DOORLOCK_BUTTON_GPIO) == 0; // active-low, internal pull-up
 }
 
+/* Red LED arbitration: lockout (solid) and deny (flashes) win over the status blink. */
+static volatile bool s_red_lockout;
+static volatile bool s_red_busy;
+static esp_timer_handle_t s_red_timer;
+static relay_red_status_t s_red_status = RED_STATUS_OFF;
+static bool s_red_status_on;
+
+static void red_status_cb(void *arg)
+{
+    (void)arg;
+    s_red_status_on = !s_red_status_on;
+    if (s_red_lockout || s_red_busy) {
+        return;
+    }
+    set(CONFIG_DOORLOCK_LED_RED_GPIO, s_red_status_on ? 1 : 0);
+}
+
+void relay_control_red_status(relay_red_status_t st)
+{
+    if (st == s_red_status) {
+        return;
+    }
+    s_red_status = st;
+    if (!s_red_timer) {
+        const esp_timer_create_args_t args = {.callback = &red_status_cb, .name = "red_status"};
+        esp_timer_create(&args, &s_red_timer);
+    }
+    if (esp_timer_is_active(s_red_timer)) {
+        esp_timer_stop(s_red_timer);
+    }
+    s_red_status_on = false;
+    if (!s_red_lockout && !s_red_busy) {
+        set(CONFIG_DOORLOCK_LED_RED_GPIO, 0);
+    }
+    if (st == RED_STATUS_OFFLINE) {
+        esp_timer_start_periodic(s_red_timer, 500 * 1000);      /* 1 Hz */
+    } else if (st == RED_STATUS_PROVISIONING) {
+        esp_timer_start_periodic(s_red_timer, 150 * 1000);      /* ~3 Hz */
+    }
+}
+
+void relay_control_beep(uint32_t ms)
+{
+    set(CONFIG_DOORLOCK_BUZZER_GPIO, 1);
+    vTaskDelay(pdMS_TO_TICKS(ms));
+    set(CONFIG_DOORLOCK_BUZZER_GPIO, 0);
+}
+
 static esp_timer_handle_t s_green_blink_timer;
 static bool s_green_blink_on;
 
@@ -101,6 +149,7 @@ void relay_control_unlock(uint32_t ms)
 
 void relay_control_deny(void)
 {
+    s_red_busy = true;
     // One failed attempt (retries still left): 2 quick red flashes, and ONE longer buzz - not a buzz per
     // flash, so this doesn't sound like the lockout tone below and train the owner to ignore both.
     for (int i = 0; i < 2; i++) {
@@ -112,6 +161,7 @@ void relay_control_deny(void)
     set(CONFIG_DOORLOCK_BUZZER_GPIO, 1);
     vTaskDelay(pdMS_TO_TICKS(250));
     set(CONFIG_DOORLOCK_BUZZER_GPIO, 0);
+    s_red_busy = false;
 }
 
 void relay_control_lockout_enter(void)
@@ -126,6 +176,7 @@ void relay_control_lockout_enter(void)
 
 void relay_control_lockout_set(bool on)
 {
+    s_red_lockout = on;
     set(CONFIG_DOORLOCK_LED_RED_GPIO, on ? 1 : 0);
 }
 

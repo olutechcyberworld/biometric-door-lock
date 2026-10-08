@@ -88,6 +88,9 @@ void WhoDetect::task()
         if (who::bench::g_dump_req.load() != who::bench::DUMP_NONE) {
             who::bench::dump_frame(img, res); // exact frame + detections, same frame recognition will use
         }
+        if (who::bench::g_frame_tap) {
+            who::bench::g_frame_tap(img, res); // owner-app live preview; see who_bench.hpp
+        }
         if (m_result_cb) {
             xSemaphoreTakeRecursive(m_result_cb_mutex, portMAX_DELAY);
             m_result_cb({res, timestamp, img});

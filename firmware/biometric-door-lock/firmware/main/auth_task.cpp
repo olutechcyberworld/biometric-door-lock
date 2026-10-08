@@ -14,6 +14,10 @@
 #include "relay_control.h"
 #include "retry_lockout.h"
 #include "who_recognition.hpp"
+#include "wifi_manager.h"
+#include "override_api.hpp"
+#include "session_ws.hpp"
+#include "user_db.hpp"
 
 using who::recognition::WhoRecognitionCore;
 
@@ -47,7 +51,23 @@ void wait_for_session_start(retry_lockout_t *lockout, bool *lockout_led_on)
         }
         vTaskDelay(pdMS_TO_TICKS(30)); // debounce: require the press to still read low after 30 ms
         if (relay_control_button_pressed()) {
-            return; // confirmed press - caller starts a session
+            // Confirmed press. Short press -> session (starts on RELEASE, so a long hold can't also start one).
+            // Held for CONFIG_DOORLOCK_PROV_HOLD_MS -> one beep + Wi-Fi provisioning mode, no session.
+            uint32_t t0 = now_ms();
+            bool long_fired = false;
+            while (relay_control_button_pressed()) {
+                if (!long_fired && now_ms() - t0 >= CONFIG_DOORLOCK_PROV_HOLD_MS) {
+                    long_fired = true;
+                    printf("AUTH,button=long_hold\n");
+                    relay_control_beep(150);
+                    wifi_manager_enter_provisioning(); // opens the setup network; returns once it is up
+                }
+                vTaskDelay(pdMS_TO_TICKS(20));
+            }
+            if (long_fired) {
+                continue; // the hold was for provisioning, not a door session
+            }
+            return; // released before the hold time - caller starts a session
         }
         // was noise, not a real press - fall through and keep waiting
     }
@@ -70,6 +90,12 @@ void auth_task(void *arg)
 
     for (;;) {
         wait_for_session_start(&lockout, &lockout_led_on);
+        if (session_ws_active() || override_api_active()) {
+            // an owner session / override window owns the sensor and the camera: this press is simply not served
+            printf("AUTH,session=ignored,reason=owner_session_active\n");
+            vTaskDelay(pdMS_TO_TICKS(300));
+            continue;
+        }
         printf("AUTH,session=start\n");
 
         // Ask fingerprint_task for one identify pass. It refuses (returns false) if a manual console/dashboard
@@ -120,6 +146,15 @@ void auth_task(void *arg)
         float face_sim = 0.f;
         bool face_ok = face_identify_blocking(recog, 6000, &face_id, &face_sim);
         relay_control_white_led(false);
+        // Binding: the recognised face must belong to the same user as the matched finger (user_db). With no users
+        // recorded yet this stays permissive, as it was before the owner app existed.
+        if (face_ok) {
+            int stored_id = face_stored_id_for_position(face_id); // recognizer id = list position, not the stored id
+            if (stored_id < 0 || !user_db_authorize(fr.id, (uint16_t)stored_id)) {
+                printf("AUTH,binding=mismatch,fp_id=%u,face_pos=%d,face_id=%d\n", (unsigned)fr.id, face_id, stored_id);
+                face_ok = false;
+            }
+        }
         act = auth_fsm_on_event(&fsm, face_ok ? AUTH_EV_FACE_PASS : AUTH_EV_FACE_FAIL);
         if (act == AUTH_ACT_UNLOCK) {
             printf("AUTH,result=grant,fp_id=%u,face_id=%d,face_sim=%.2f\n", (unsigned)fr.id, face_id, face_sim);

@@ -21,7 +21,9 @@ for f in ["main/CMakeLists.txt", "main/idf_component.yml", "main/app_main.cpp", 
           "main/fingerprint_task.cpp", "sdkconfig.defaults", "partitions.csv", "dependencies.lock",
           "components/as608/CMakeLists.txt", "components/kconfig_shim/Kconfig",
           "components/auth_fsm/CMakeLists.txt", "components/relay_control/CMakeLists.txt",
-          "components/retry_lockout/CMakeLists.txt",
+          "components/retry_lockout/CMakeLists.txt", "components/pin_auth/CMakeLists.txt", "components/user_store/CMakeLists.txt", "components/jpeg_lite/CMakeLists.txt",
+          "main/user_db.cpp", "main/override_api.cpp", "main/session_ws.cpp",
+          "components/wifi_manager/CMakeLists.txt", "components/device_link/CMakeLists.txt", "main/pin_api.cpp",
           "main/auth_task.cpp", "main/face_auth_bridge.cpp"]:
     need(os.path.join(fw, f), "firmware file")
 d = open(os.path.join(fw, "sdkconfig.defaults")).read()

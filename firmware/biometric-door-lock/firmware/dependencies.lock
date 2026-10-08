@@ -33,7 +33,7 @@ dependencies:
       type: service
     version: 0.5.3
   espressif/dl_fft:
-    component_hash: 3e8f7d34e04bfa6333f289a6d126745bebe0cee9311b81a6a5d106047f63ef65
+    component_hash: 965be7152132b365061abf5fc5fc7b85e525f73b94a204cdda61cfe9572c0d77
     dependencies:
     - name: idf
       require: private
@@ -41,14 +41,14 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 0.7.0
+    version: 0.8.0
   espressif/esp-dl:
-    component_hash: 233ee8d37dfedeb637fc74713b87bd861ac530cfbcc4c63c57c2e51064cdda31
+    component_hash: 3148b2692a2943d7e35401dc10a181b6ba83515ec70ef51499ac5d2593eef3e2
     dependencies:
     - name: espressif/dl_fft
       registry_url: https://components.espressif.com
       require: private
-      version: '>=0.6.0'
+      version: '>=0.8.0'
     - name: espressif/esp_new_jpeg
       registry_url: https://components.espressif.com
       require: private
@@ -69,7 +69,7 @@ dependencies:
     - esp32s2
     - esp32s3
     - esp32s31
-    version: 3.3.11
+    version: 3.3.13
   espressif/esp32_s3_eye:
     component_hash: 0747a17b311da4b911f33fa033ed843211b882391ae82bea2f9dd9f9f536607e
     dependencies:
@@ -273,6 +273,16 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 3.0.3
+  espressif/mdns:
+    component_hash: b5b30022c46302eab89c1d2e3b6fb5918a627563a7462f0ee284b22b9a934967
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.14.0
   espressif/usb_host_uvc:
     component_hash: f20c4e4dea50536e2e29daaf589b5f5984402284c155867daef27d6b64869f78
     dependencies:
@@ -364,9 +374,10 @@ direct_dependencies:
 - espressif/esp32_s3_eye
 - espressif/esp_video
 - espressif/human_face_recognition
+- espressif/mdns
 - who_frame_cap
 - who_lcd
 - who_task
-manifest_hash: c04ade31cd49e378ff08466e2077f528d15e226a0dd6d7c3abcc98c324384fc3
+manifest_hash: ab9628b8cac8d0a3e62eb0ffad72e4f8181b56961497ef55bcd803a0b099c4c0
 target: esp32s3
 version: 2.0.0

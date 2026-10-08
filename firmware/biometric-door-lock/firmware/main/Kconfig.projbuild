@@ -94,4 +94,59 @@ menu "Door lock"
         int "Green LED blink half-period while waiting for a finger (milliseconds)"
         default 300
         depends on DOORLOCK_AUTH_AUTO
+
+    config DOORLOCK_PROV_HOLD_MS
+        int "Hold the wake button this long to enter Wi-Fi provisioning mode (milliseconds)"
+        default 5000
+        depends on DOORLOCK_AUTH_AUTO
+        help
+            A press shorter than this starts an authentication session as before (on release). Holding for this
+            long gives one beep and opens the setup network instead.
+
+    config DOORLOCK_WIFI_HOSTNAME
+        string "Device hostname (advertised over mDNS as <hostname>.local)"
+        default "doorlock"
+
+    config DOORLOCK_WIFI_AUTO_PROV
+        bool "Open the setup network automatically on boot when no Wi-Fi credentials are stored"
+        default y
+
+    config DOORLOCK_WIFI_PROV_TIMEOUT_S
+        int "Setup network stays open this long (seconds)"
+        default 180
+
+    config DOORLOCK_WIFI_AP_PASS
+        string "WPA2 password of the setup network (8-63 characters)"
+        default "doorlock-setup"
+        help
+            This protects only the short provisioning window (physical button hold required), not your home
+            Wi-Fi. Change it per unit/build if you want.
+
+    config DOORLOCK_WIFI_PS_NONE
+        bool "Disable Wi-Fi modem sleep while online (more reliable discovery/HTTP, higher current draw)"
+        default y
+
+    config DOORLOCK_PIN_MAX_ATTEMPTS
+        int "Wrong PIN attempts (owner app) before a cooldown lockout"
+        default 5
+        help
+            Independent of the door's own fingerprint+face lockout. Cooldowns escalate 30 s / 60 s / 5 min.
+
+    config DOORLOCK_PIN_FINGER_WAIT_MS
+        int "How long setting or changing the PIN waits for an enrolled finger at the door (milliseconds)"
+        default 20000
+
+    config DOORLOCK_SESSION_WS
+        bool "Owner-app live session (WebSocket): enroll people and manage users"
+        default y
+        select HTTPD_WS_SUPPORT
+        select HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT
+        help
+            Turns on the esp_http_server WebSocket and post-handshake-callback options for you. Needs the PIN stage and the camera.
+
+    config DOORLOCK_STREAM_JPEG_QUALITY
+        int "Live preview JPEG quality (1-100)"
+        default 40
+        range 10 90
+        depends on DOORLOCK_SESSION_WS
 endmenu

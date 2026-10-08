@@ -21,6 +21,13 @@ void relay_control_white_led(bool on);    /* face-check stage indicator, near th
 void relay_control_green_blink_start(void);
 void relay_control_green_blink_stop(void);
 
+/* Red LED status blink, owned here so it can never fight the lockout/deny patterns below:
+ *   lockout (solid red) > deny flashes > status blink. OFFLINE = slow blink, PROVISIONING = fast blink. */
+typedef enum { RED_STATUS_OFF = 0, RED_STATUS_OFFLINE, RED_STATUS_PROVISIONING } relay_red_status_t;
+void relay_control_red_status(relay_red_status_t s);
+
+void relay_control_beep(uint32_t ms);     /* single blocking buzzer beep (feedback for the 5 s hold) */
+
 /* Wake/start button: internal pull-up, wired to GND, so pressed reads as logic low. Debouncing is the
  * caller's job (main/auth_task.cpp) - this just reports the instantaneous raw pin state. */
 bool relay_control_button_pressed(void);

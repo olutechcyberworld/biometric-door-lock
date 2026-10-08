@@ -19,7 +19,9 @@ modified: components/who_recognition/who_recognition.cpp
 What they do:
 - who_detect/who_bench.hpp (new)      timing helpers, BENCH result lines, heartbeat, and the frame tap (`dump_frame`)
                                       that prints the exact image handed to the detector plus its detections.
-- who_detect/who_detect.{hpp,cpp}     time the detector run, count frames, and call the frame tap.
+- who_detect/who_detect.{hpp,cpp}     time the detector run, count frames, and call the frame tap. who_bench.hpp also holds
+                                      `g_frame_tap`, a per-frame function pointer the owner-app live preview
+                                      (main/session_ws.cpp) installs; who_detect.cpp calls it once per frame.
 - who_recognition/who_recognition.cpp time the recognizer and print one BENCH line per recognition attempt.
 - who_frame_cap/who_cam_counter.hpp (new), who_frame_cap_node.cpp   count frames delivered by the camera driver.
 

@@ -17,6 +17,12 @@
 #include "fingerprint_task.hpp"
 #include "auth_task.hpp"
 #include "face_auth_bridge.hpp"
+#include "wifi_manager.h"
+#include "device_link.h"
+#include "pin_api.hpp"
+#include "override_api.hpp"
+#include "session_ws.hpp"
+#include "user_db.hpp"
 
 using who::recognition::WhoRecognitionCore;
 
@@ -40,7 +46,9 @@ public:
         });
         char db_path[64];
         snprintf(db_path, sizeof(db_path), "%s/face.db", CONFIG_SPIFLASH_MOUNT_POINT);
-        m_recognition->set_recognizer(new HumanFaceRecognizer(db_path));
+        auto *recognizer = new HumanFaceRecognizer(db_path);
+        face_auth_init(recognizer); // deletion by id + the mutex shared with door auth and the owner session
+        m_recognition->set_recognizer(recognizer);
         m_recognition->set_detect_model(new HumanFaceDetect());
     }
 
@@ -71,7 +79,7 @@ static void console_task(void *arg)
 #else
     printf("FWINFO,viewer=2,modes=qhv,fp=0\n");
 #endif
-    printf("console ready: r=recognize e=enroll d=delete-last v/h/q=frame f=finger-identify n=finger-enroll p=probe X=finger-erase\n");
+    printf("console ready: r=recognize e=enroll d=delete-last v/h/q=frame f=finger-identify n=finger-enroll p=probe X=finger-erase P=pin-reset(x2) U=prune-unbound-fingers(x2) F=clean-faces(x2)\n");
     int64_t last_hb_us = 0;
     while (true) {
         int c = getchar();
@@ -105,6 +113,15 @@ static void console_task(void *arg)
         case 'q':
             who::bench::g_dump_req.store(who::bench::DUMP_QUARTER);
             continue;
+        case 'F': // clean the face database (send twice): wipe it, or drop only faces no user owns
+            user_db_console_prune_faces();
+            continue;
+        case 'U': // delete fingerprints that belong to no user (send twice); keeps what the app enrolled
+            user_db_console_prune();
+            continue;
+        case 'P': // erase the owner-app PIN (send twice within 5 s) - the only way back in if the PIN is forgotten
+            pin_api_console_reset();
+            continue;
         case 'f': // fingerprint: identify / enroll next / probe / erase all (see fingerprint_task.hpp)
         case 'n':
         case 'p':
@@ -133,5 +150,11 @@ extern "C" void app_main(void)
         return;
     }
     xTaskCreate(console_task, "console", 4096, app->recog_task(), 3, nullptr);
+    user_db_start();                    // who is enrolled (finger <-> faces); BEFORE the auth loop can ask
     auth_task_start(app->recog_task()); // Phase 3: continuous fingerprint -> face -> relay loop; no-op if disabled
+    device_link_start();                // registers the online/offline hook BEFORE wifi can come up
+    wifi_manager_start();               // after relay_control_init() (inside auth_task_start): owns the red LED blink
+    pin_api_start();                    // after wifi_manager_start(): NVS is up; registers /challenge /auth /pin/* with device_link
+    override_api_start();               // POST /override
+    session_ws_start(app->recog_task()); // GET /session (WebSocket): enroll / manage + the live preview tap
 }

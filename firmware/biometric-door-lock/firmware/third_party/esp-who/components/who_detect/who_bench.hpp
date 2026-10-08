@@ -60,6 +60,11 @@ inline void report(size_t faces, int64_t recog_start_us, int64_t recog_end_us, i
 //   FRAME_END
 // Text/base64 on purpose: survives CRLF translation on the UART console and interleaved log lines.
 // ---------------------------------------------------------------------------------------------
+// Optional per-frame hook (main/session_ws.cpp): called in the detector task for EVERY frame with the exact image
+// the detector saw and its detections. Must be cheap and must not block. nullptr = off.
+typedef void (*frame_tap_fn)(const dl::image::img_t &img, const std::list<dl::detect::result_t> &res);
+inline frame_tap_fn g_frame_tap = nullptr;
+
 enum { DUMP_NONE = 0, DUMP_FULL = 1, DUMP_HALF = 2, DUMP_QUARTER = 3 };
 inline std::atomic<int> g_dump_req{DUMP_NONE};
 
